@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard – Soja e Milho: quando vender?</title>
+<!-- Chart.js: biblioteca que desenha gráficos dentro de um <canvas> -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+<style>
+  body { font-family: Georgia, serif; background: #eef2e8; color: #1f2a1c; margin: 0; padding: 24px; }
+  h1 { margin: 0 0 4px; font-size: 1.8rem; }
+  .aviso { color: #5b6b52; font-size: .9rem; margin-bottom: 20px; }
+  /* auto-fit: encaixa quantos cartões couberem na largura da tela (responsivo) */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; }
+  .graficos { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+  .card { background: #fff; border: 1px solid #cfd8c4; border-radius: 10px; padding: 16px; }
+  .kpi span { display: block; font-size: 2rem; font-weight: bold; margin-top: 4px; }
+  .soja { color: #b7860b; } .milho { color: #2f6b3a; }
+  .insight { margin-top: 14px; }
+</style>
+</head>
+<body>
+  <h1>🌾 Soja e milho: qual o melhor mês para vender?</h1>
+  <div class="aviso">⚠️ Dados fictícios, criados para fins didáticos (inspirados no Oeste do Paraná).</div>
+
+  <!-- CAMADA 2: KPIs (respondem "como estamos?") -->
+  <div class="kpis">
+    <div class="card kpi">Receita total<span id="kpiReceita">–</span></div>
+    <div class="card kpi">Preço médio da soja<span id="kpiSoja" class="soja">–</span></div>
+    <div class="card kpi">Preço médio do milho<span id="kpiMilho" class="milho">–</span></div>
+    <div class="card kpi">Melhor mês p/ soja<span id="kpiMelhor">–</span></div>
+  </div>
+
+  <!-- CAMADA 3: gráficos (respondem "quando?" e "qual cultura?") -->
+  <div class="graficos">
+    <div class="card"><canvas id="graficoPreco"></canvas></div>
+    <div class="card"><canvas id="graficoReceita"></canvas></div>
+  </div>
+  <div class="card insight" id="insight"></div>
+
+<script>
+// ===== 1) DADOS (camada 1) =====
+// Cada linha: mês, cultura, preço da saca (R$) e sacas vendidas (em milhares)
+const dados = [
+  { mes: "Jan", cultura: "Soja",  preco: 128, sacas: 18 }, { mes: "Jan", cultura: "Milho", preco: 58, sacas: 5 },
+  { mes: "Fev", cultura: "Soja",  preco: 124, sacas: 22 }, { mes: "Fev", cultura: "Milho", preco: 56, sacas: 4 },
+  { mes: "Mar", cultura: "Soja",  preco: 121, sacas: 30 }, { mes: "Mar", cultura: "Milho", preco: 54, sacas: 6 },
+  { mes: "Abr", cultura: "Soja",  preco: 118, sacas: 26 }, { mes: "Abr", cultura: "Milho", preco: 52, sacas: 8 },
+  { mes: "Mai", cultura: "Soja",  preco: 120, sacas: 15 }, { mes: "Mai", cultura: "Milho", preco: 55, sacas: 20 },
+  { mes: "Jun", cultura: "Soja",  preco: 125, sacas: 12 }, { mes: "Jun", cultura: "Milho", preco: 60, sacas: 28 },
+  { mes: "Jul", cultura: "Soja",  preco: 131, sacas: 10 }, { mes: "Jul", cultura: "Milho", preco: 64, sacas: 24 },
+  { mes: "Ago", cultura: "Soja",  preco: 134, sacas: 9 },  { mes: "Ago", cultura: "Milho", preco: 66, sacas: 18 },
+  { mes: "Set", cultura: "Soja",  preco: 138, sacas: 8 },  { mes: "Set", cultura: "Milho", preco: 63, sacas: 12 },
+  { mes: "Out", cultura: "Soja",  preco: 136, sacas: 7 },  { mes: "Out", cultura: "Milho", preco: 61, sacas: 9 },
+  { mes: "Nov", cultura: "Soja",  preco: 132, sacas: 6 },  { mes: "Nov", cultura: "Milho", preco: 59, sacas: 6 },
+  { mes: "Dez", cultura: "Soja",  preco: 129, sacas: 7 },  { mes: "Dez", cultura: "Milho", preco: 57, sacas: 5 },
+];
+
+// ===== 2) PROCESSAMENTO =====
+const meses = [...new Set(dados.map(d => d.mes))];          // lista de meses sem repetir
+const doTipo = c => dados.filter(d => d.cultura === c);     // linhas de uma cultura
+const soja = doTipo("Soja"), milho = doTipo("Milho");
+
+// Receita = sacas (milhares) × 1000 × preço. soma() acumula valores de uma lista.
+const soma = (lista, f) => lista.reduce((s, d) => s + f(d), 0);
+const receita = d => d.sacas * 1000 * d.preco;
+const receitaSoja = soma(soja, receita), receitaMilho = soma(milho, receita);
+const receitaTotal = receitaSoja + receitaMilho;
+
+// Preço médio simples = soma dos preços ÷ quantidade de meses
+const mediaSoja = soma(soja, d => d.preco) / soja.length;
+const mediaMilho = soma(milho, d => d.preco) / milho.length;
+
+// Mês com maior preço da soja (compara dois a dois e fica com o maior)
+const melhor = soja.reduce((a, b) => (a.preco > b.preco ? a : b));
+
+// ===== 3) KPIs =====
+const brl = n => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+document.getElementById("kpiReceita").textContent = "R$ " + (receitaTotal / 1e6).toFixed(1).replace(".", ",") + " mi";
+document.getElementById("kpiSoja").textContent = brl(mediaSoja);
+document.getElementById("kpiMilho").textContent = brl(mediaMilho);
+document.getElementById("kpiMelhor").textContent = melhor.mes + " (" + brl(melhor.preco) + ")";
+
+// ===== 4) GRÁFICOS =====
+// Linha: ideal para EVOLUÇÃO no tempo (preço mês a mês)
+new Chart(document.getElementById("graficoPreco"), {
+  type: "line",
+  data: { labels: meses, datasets: [
+    { label: "Soja (R$/saca)",  data: soja.map(d => d.preco),  borderColor: "#b7860b", tension: 0.3 },
+    { label: "Milho (R$/saca)", data: milho.map(d => d.preco), borderColor: "#2f6b3a", tension: 0.3 }
+  ]},
+  options: { plugins: { title: { display: true, text: "Em que mês o preço é melhor?" } } }
+});
+
+// Barras: ideal para COMPARAR categorias (receita por cultura)
+new Chart(document.getElementById("graficoReceita"), {
+  type: "bar",
+  data: { labels: ["Soja", "Milho"], datasets: [{
+    label: "Receita (R$ milhões)",
+    data: [receitaSoja / 1e6, receitaMilho / 1e6],
+    backgroundColor: ["#b7860b", "#2f6b3a"]
+  }]},
+  options: { plugins: { title: { display: true, text: "Qual cultura rende mais?" } } }
+});
+
+// Insight automático: usa os números calculados
+document.getElementById("insight").innerHTML =
+  "💡 <b>Insight:</b> o preço da soja chega ao pico em " + melhor.mes +
+  ", mas a maior parte das vendas acontece em mar–abr, quando o preço é o mais baixo do ano. " +
+  "Guardar parte da safra até " + melhor.mes + " pode aumentar a receita.";
+</script>
+</body>
+</html>
